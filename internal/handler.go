@@ -40,19 +40,25 @@ func (s Server) handleFetchURLs(w http.ResponseWriter, r *http.Request) {
 }
 
 func fetchURLs(ctx context.Context, maxOutcomeRequests int, reqTimeout time.Duration, urls []string) (res []Data, firstErr error) {
+	errorCh := make(chan error)
+	errorProcessingDone := make(chan struct{})
 	urlsCh := make(chan string, maxOutcomeRequests)
 	go func() {
+		defer close(urlsCh)
+
 		for _, u := range urls {
-			urlsCh <- u
+			select {
+			case <-ctx.Done():
+				return
+			case urlsCh <- u:
+			case <-errorProcessingDone:
+				return
+			}
 		}
-		close(urlsCh)
 	}()
+
 	ctx, cancel := context.WithCancel(ctx)
 
-	var (
-		errorCh             = make(chan error)
-		errorProcessingDone = make(chan struct{})
-	)
 	go func() {
 		for err := range errorCh {
 			select {
@@ -174,8 +180,9 @@ func (res *Results) Append(s ...Data) {
 }
 
 func (res *Results) Get() []Data {
-	res.mu.Lock()
-	defer res.mu.Unlock()
+	// if read only one thread
+	// res.mu.Lock()
+	// defer res.mu.Unlock()
 
 	return res.res
 }

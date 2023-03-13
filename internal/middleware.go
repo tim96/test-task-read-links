@@ -11,6 +11,11 @@ func rateLimit(h http.Handler, maxConcurrencyRequests uint64) http.Handler {
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		mu.Lock()
+		if reqCount >= maxConcurrencyRequests {
+			mu.Unlock()
+			http.Error(w, http.StatusText(http.StatusTooManyRequests), http.StatusTooManyRequests)
+			return
+		}
 		reqCount++
 		mu.Unlock()
 
@@ -19,10 +24,6 @@ func rateLimit(h http.Handler, maxConcurrencyRequests uint64) http.Handler {
 			reqCount--
 			mu.Unlock()
 		}()
-
-		if reqCount > maxConcurrencyRequests {
-			http.Error(w, http.StatusText(http.StatusTooManyRequests), http.StatusTooManyRequests)
-		}
 
 		h.ServeHTTP(w, r)
 	})
